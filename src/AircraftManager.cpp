@@ -268,7 +268,8 @@ void AircraftManager::DrawDetails(LGFX_Sprite &backbuffer)
     // Every field is optional, so the rows stack downwards from here instead of
     // sitting at fixed offsets.
     int y = 45;
-    constexpr int LINE = 16;
+    constexpr int LINE = 20;
+    constexpr int HEADING_LINE = 16;
     constexpr int BLOCK = 26;
 
     if (detailIcon)
@@ -339,8 +340,8 @@ void AircraftManager::DrawDetails(LGFX_Sprite &backbuffer)
             line2.trim();
 
             backbuffer.drawString(type.substring(0, split), CENTRE, y);
-            backbuffer.drawString(line2, CENTRE, y + LINE);
-            y += BLOCK + LINE;
+            backbuffer.drawString(line2, CENTRE, y + HEADING_LINE);
+            y += BLOCK + HEADING_LINE;
         }
         else
         {
