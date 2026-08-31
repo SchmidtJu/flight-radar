@@ -32,7 +32,9 @@ public:
         }
         {
             auto cfg = _light.config();
-            cfg.pin_bl = -1;
+            cfg.pin_bl = 1;
+            cfg.freq = 12000;
+            cfg.pwm_channel = 7;
             cfg.invert = false;
             _light.config(cfg);
             _panel.setLight(&_light);

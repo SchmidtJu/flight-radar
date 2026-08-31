@@ -39,8 +39,12 @@ This project is a fork of [Anthony Sturdy's Micro Radar project](https://github.
 |GP4|DC |   
 |GP5|CS |   
 |GP6|RST |   
-|5V|VCC |   
+|GP1|BLK |   
+|3V3|VCC |   
 |GND|GND |   
+
+> The AZDelivery GC9A01 module is specified for 3.3 V on both logic and supply — do not connect VCC to 5V.
+> BLK is driven by PWM, so the brightness can be controlled in software.
 
 ### KY-040 Rotary Encoder
 
@@ -49,7 +53,7 @@ This project is a fork of [Anthony Sturdy's Micro Radar project](https://github.
 | GP9 | CLK |
 | GP8 | DT |
 | GP7 | SW |
-| 5V | + |
+| 3V3 | + |
 | GND | GND |
 
 ---

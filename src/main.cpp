@@ -18,7 +18,9 @@
 #define ENCODER_B 8
 #define ENCODER_SW 7
 
+#ifndef RGB_LED_PIN
 #define RGB_LED_PIN 21
+#endif
 
 Adafruit_NeoPixel statusLed(
     1,
@@ -27,6 +29,7 @@ Adafruit_NeoPixel statusLed(
 
 constexpr int SCREEN_SIZE = 240;
 constexpr int SCREEN_SIZE_DIV_2 = (SCREEN_SIZE / 2);
+constexpr uint8_t DEFAULT_BACKLIGHT = 255;
 
 LGFX tft;
 LGFX_Sprite backbuffer(&tft);
@@ -50,10 +53,35 @@ void SetLed(uint8_t r, uint8_t g, uint8_t b)
   statusLed.show();
 }
 
+void PrintBootDiagnostics()
+{
+  Serial.printf("Chip: %s rev %d, %d core(s)\n",
+                ESP.getChipModel(),
+                ESP.getChipRevision(),
+                ESP.getChipCores());
+
+  Serial.printf("Flash: %u bytes\n", ESP.getFlashChipSize());
+  Serial.printf("PSRAM: %u bytes (%u free)\n", ESP.getPsramSize(), ESP.getFreePsram());
+  Serial.printf("Heap: %u bytes free\n", ESP.getFreeHeap());
+
+  if (ESP.getPsramSize() == 0)
+  {
+    Serial.println("WARNING: no PSRAM detected - check board_build.psram_type / memory_type in platformio.ini");
+  }
+}
+
 void setup()
 {
   Serial.begin(115200);
-  // delay(1000); // avoids immediate serial output being cut off - uncomment if needed
+
+  // USB CDC swallows anything printed before the host attaches, and the boot
+  // diagnostics are the only signal that PSRAM came up
+  while (!Serial && millis() < 1000)
+  {
+    delay(10);
+  }
+
+  PrintBootDiagnostics();
 
   statusLed.begin();
   statusLed.setBrightness(200);
@@ -66,8 +94,7 @@ void setup()
   tft.init();
   tft.invertDisplay(true);
   tft.setRotation(2);
-  // pinMode(3, OUTPUT);
-  // digitalWrite(3, HIGH);
+  tft.setBrightness(DEFAULT_BACKLIGHT);
 
   backbuffer.setColorDepth(8);
   backbuffer.createSprite(SCREEN_SIZE, SCREEN_SIZE);
