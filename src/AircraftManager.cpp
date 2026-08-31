@@ -87,6 +87,7 @@ void AircraftManager::Initialise()
     ReadToggle("det-alt", detailAltitude);
     ReadToggle("det-vs", detailVerticalSpeed);
     ReadToggle("det-spd", detailSpeed);
+    ReadToggle("det-spd-kmh", detailSpeedKmh);
     ReadToggle("det-hdg", detailHeading);
     ReadToggle("det-reg", detailRegistration);
     ReadToggle("det-callsign", detailCallsign);
@@ -441,6 +442,16 @@ void AircraftManager::DrawDetails(LGFX_Sprite &backbuffer)
     {
         backbuffer.drawString(
             "SPD " + String((int)tracked.state.velocity) + " m/s",
+            CENTRE,
+            y);
+
+        y += LINE;
+    }
+
+    if (detailSpeedKmh)
+    {
+        backbuffer.drawString(
+            "SPD " + String((int)(tracked.state.velocity * 3.6f + 0.5f)) + " km/h",
             CENTRE,
             y);
 

@@ -35,6 +35,7 @@ private:
     bool detailAltitude = true;
     bool detailVerticalSpeed = true;
     bool detailSpeed = true;
+    bool detailSpeedKmh = true;
     bool detailHeading = true;
     bool detailRegistration = true;
     bool detailCallsign = true;

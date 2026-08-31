@@ -218,8 +218,12 @@ static const char CONFIG_HTML[] PROGMEM = R"(
                             <input name="det-vs" type="checkbox" %DET_VS% class="accent-green-500">
                         </label>
                         <label class="flex items-center gap-2">
-                            <span>Speed:</span>
+                            <span>Speed (m/s):</span>
                             <input name="det-spd" type="checkbox" %DET_SPD% class="accent-green-500">
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <span>Speed (km/h):</span>
+                            <input name="det-spd-kmh" type="checkbox" %DET_SPD_KMH% class="accent-green-500">
                         </label>
                         <label class="flex items-center gap-2">
                             <span>Heading:</span>
@@ -360,6 +364,7 @@ void ConfigurationWebServer::Initialise()
         const String detailAltitude = prefs.getString("det-alt", "true");
         const String detailVerticalSpeed = prefs.getString("det-vs", "true");
         const String detailSpeed = prefs.getString("det-spd", "true");
+        const String detailSpeedKmh = prefs.getString("det-spd-kmh", "true");
         const String detailHeading = prefs.getString("det-hdg", "true");
         const String detailRegistration = prefs.getString("det-reg", "true");
         const String detailCallsign = prefs.getString("det-callsign", "true");
@@ -400,7 +405,7 @@ void ConfigurationWebServer::Initialise()
             [latitude, longitude, radius, openskyClientId, openskySecret, scanlineEnabled, circlesEnabled, infoTextEnabled, triangleEnabled,
              mapEnabled, darkFilterEnabled, mapBrightness, backlight, flipped, zoomInfo, fetchInterval, creditBudget, authenticated,
              rateLimitRemaining, detailIcon, detailType, detailRoute, detailAirportNames, detailAltitude, detailVerticalSpeed,
-             detailSpeed, detailHeading, detailRegistration, detailCallsign, detailIcao]
+             detailSpeed, detailSpeedKmh, detailHeading, detailRegistration, detailCallsign, detailIcao]
             (const String& var) -> String {
                 if (var == "LATITUDE")       return latitude;
                 if (var == "LONGITUDE")      return longitude;
@@ -430,6 +435,7 @@ void ConfigurationWebServer::Initialise()
                 if (var == "DET_ALT")        return detailAltitude == "true" ? "checked" : "";
                 if (var == "DET_VS")         return detailVerticalSpeed == "true" ? "checked" : "";
                 if (var == "DET_SPD")        return detailSpeed == "true" ? "checked" : "";
+                if (var == "DET_SPD_KMH")    return detailSpeedKmh == "true" ? "checked" : "";
                 if (var == "DET_HDG")        return detailHeading == "true" ? "checked" : "";
                 if (var == "DET_REG")        return detailRegistration == "true" ? "checked" : "";
                 if (var == "DET_CALLSIGN")   return detailCallsign == "true" ? "checked" : "";
@@ -487,6 +493,7 @@ void ConfigurationWebServer::Initialise()
         prefs.putString("det-alt", request->hasParam("det-alt", true) ? "true" : "false");
         prefs.putString("det-vs", request->hasParam("det-vs", true) ? "true" : "false");
         prefs.putString("det-spd", request->hasParam("det-spd", true) ? "true" : "false");
+        prefs.putString("det-spd-kmh", request->hasParam("det-spd-kmh", true) ? "true" : "false");
         prefs.putString("det-hdg", request->hasParam("det-hdg", true) ? "true" : "false");
         prefs.putString("det-reg", request->hasParam("det-reg", true) ? "true" : "false");
         prefs.putString("det-callsign", request->hasParam("det-callsign", true) ? "true" : "false");
