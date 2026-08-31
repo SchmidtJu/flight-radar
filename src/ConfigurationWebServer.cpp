@@ -132,13 +132,21 @@ static const char CONFIG_HTML[] PROGMEM = R"(
                         class="flex-1 border border-green-500 bg-gray-900 w-full px-3 py-2 text-lg sm:text-base sm:px-1 sm:py-0">
                 </label>
 
-                <div class="flex flex-col sm:flex-row gap-4 sm:justify-between">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-2">
                     <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                         <span>Radar sweep:</span>
                         <input
                             name="scanline"
                             type="checkbox"
                             %SCANLINE%
+                            class="px-3 sm:px-1 accent-green-500">
+                    </label>
+                    <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                        <span>Radar circles:</span>
+                        <input
+                            name="circles"
+                            type="checkbox"
+                            %CIRCLES%
                             class="px-3 sm:px-1 accent-green-500">
                     </label>
                     <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
@@ -158,6 +166,37 @@ static const char CONFIG_HTML[] PROGMEM = R"(
                             class="px-3 sm:px-1 accent-green-500">
                     </label>
                 </div>
+
+                <fieldset class="border border-green-500 p-3 flex flex-col gap-4 sm:gap-2">
+                    <legend class="px-1">Aircraft details</legend>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-2">
+                        <label class="flex items-center gap-2">
+                            <span>Icon:</span>
+                            <input name="det-icon" type="checkbox" %DET_ICON% class="accent-green-500">
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <span>Callsign:</span>
+                            <input name="det-callsign" type="checkbox" %DET_CALLSIGN% class="accent-green-500">
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <span>Altitude:</span>
+                            <input name="det-alt" type="checkbox" %DET_ALT% class="accent-green-500">
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <span>Speed:</span>
+                            <input name="det-spd" type="checkbox" %DET_SPD% class="accent-green-500">
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <span>Heading:</span>
+                            <input name="det-hdg" type="checkbox" %DET_HDG% class="accent-green-500">
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <span>Transponder:</span>
+                            <input name="det-icao" type="checkbox" %DET_ICAO% class="accent-green-500">
+                        </label>
+                    </div>
+                </fieldset>
 
                 <div class="flex flex-col sm:flex-row gap-4 sm:gap-5">
                     <input
@@ -216,8 +255,15 @@ void ConfigurationWebServer::Initialise()
         const String openskyClientId = prefs.getString("opensky-id", "");
         String openskySecret = prefs.getString("opensky-secret", "");
         const String scanlineEnabled = prefs.getString("scanline", "true");
+        const String circlesEnabled = prefs.getString("circles", "true");
         const String infoTextEnabled = prefs.getString("infotext", "true");
         const String triangleEnabled = prefs.getString("triangle", "true");
+        const String detailIcon = prefs.getString("det-icon", "true");
+        const String detailCallsign = prefs.getString("det-callsign", "true");
+        const String detailAltitude = prefs.getString("det-alt", "true");
+        const String detailSpeed = prefs.getString("det-spd", "true");
+        const String detailHeading = prefs.getString("det-hdg", "true");
+        const String detailIcao = prefs.getString("det-icao", "true");
         const String mapEnabled = prefs.getString("map", "true");
         const String darkFilterEnabled = prefs.getString("map-dark", "true");
         const String mapBrightness = prefs.getString("map-brightness", "100");
@@ -242,8 +288,9 @@ void ConfigurationWebServer::Initialise()
         AsyncWebServerResponse* response = request->beginResponse(
             200, "text/html",
             (const uint8_t*)CONFIG_HTML, sizeof(CONFIG_HTML) - 1,
-            [latitude, longitude, radius, openskyClientId, openskySecret, scanlineEnabled, infoTextEnabled, triangleEnabled,
-             mapEnabled, darkFilterEnabled, mapBrightness, backlight, flipped, zoomInfo]
+            [latitude, longitude, radius, openskyClientId, openskySecret, scanlineEnabled, circlesEnabled, infoTextEnabled, triangleEnabled,
+             mapEnabled, darkFilterEnabled, mapBrightness, backlight, flipped, zoomInfo,
+             detailIcon, detailCallsign, detailAltitude, detailSpeed, detailHeading, detailIcao]
             (const String& var) -> String {
                 if (var == "LATITUDE")       return latitude;
                 if (var == "LONGITUDE")      return longitude;
@@ -251,6 +298,7 @@ void ConfigurationWebServer::Initialise()
                 if (var == "OPENSKY_ID")     return openskyClientId;
                 if (var == "OPENSKY_SECRET") return openskySecret;
                 if (var == "SCANLINE")       return scanlineEnabled == "true" ? "checked" : "";
+                if (var == "CIRCLES")        return circlesEnabled == "true" ? "checked" : "";
                 if (var == "INFOTEXT")       return infoTextEnabled == "true" ? "checked" : "";
                 if (var == "TRIANGLE")       return triangleEnabled == "true" ? "checked" : "";
                 if (var == "MAP")            return mapEnabled == "true" ? "checked" : "";
@@ -259,6 +307,12 @@ void ConfigurationWebServer::Initialise()
                 if (var == "BACKLIGHT")      return backlight;
                 if (var == "FLIP")           return flipped == "true" ? "checked" : "";
                 if (var == "ZOOM_INFO")      return zoomInfo;
+                if (var == "DET_ICON")       return detailIcon == "true" ? "checked" : "";
+                if (var == "DET_CALLSIGN")   return detailCallsign == "true" ? "checked" : "";
+                if (var == "DET_ALT")        return detailAltitude == "true" ? "checked" : "";
+                if (var == "DET_SPD")        return detailSpeed == "true" ? "checked" : "";
+                if (var == "DET_HDG")        return detailHeading == "true" ? "checked" : "";
+                if (var == "DET_ICAO")       return detailIcao == "true" ? "checked" : "";
                 return "";
             }
         );
@@ -298,11 +352,18 @@ void ConfigurationWebServer::Initialise()
 
         // An unchecked box sends no parameter at all, so absence means false.
         prefs.putString("scanline", request->hasParam("scanline", true) ? "true" : "false");
+        prefs.putString("circles", request->hasParam("circles", true) ? "true" : "false");
         prefs.putString("triangle", request->hasParam("triangle", true) ? "true" : "false");
         prefs.putString("infotext", request->hasParam("infotext", true) ? "true" : "false");
         prefs.putString("map", request->hasParam("map", true) ? "true" : "false");
         prefs.putString("map-dark", request->hasParam("map-dark", true) ? "true" : "false");
         prefs.putString("flip", request->hasParam("flip", true) ? "true" : "false");
+        prefs.putString("det-icon", request->hasParam("det-icon", true) ? "true" : "false");
+        prefs.putString("det-callsign", request->hasParam("det-callsign", true) ? "true" : "false");
+        prefs.putString("det-alt", request->hasParam("det-alt", true) ? "true" : "false");
+        prefs.putString("det-spd", request->hasParam("det-spd", true) ? "true" : "false");
+        prefs.putString("det-hdg", request->hasParam("det-hdg", true) ? "true" : "false");
+        prefs.putString("det-icao", request->hasParam("det-icao", true) ? "true" : "false");
         prefs.end();
 
         request->send(200, "text/html", "Saved - restarting device...");

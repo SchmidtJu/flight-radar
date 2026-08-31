@@ -61,13 +61,24 @@ void AircraftManager::Initialise()
                   viewport.LonMin(),
                   viewport.LonMax());
 
-    // configuration
-    const String renderText = configServer.GetStoredString("infotext");
-    const String renderTris = configServer.GetStoredString("triangle");
-    if (!renderText.isEmpty())
-        displayInfoText = renderText == "true" ? true : false;
-    if (!renderTris.isEmpty())
-        displayTriangles = renderTris == "true" ? true : false;
+    // configuration. An unset key keeps the member default, so a device that
+    // was never configured still shows everything.
+    auto ReadToggle = [this](const char *key, bool &target)
+    {
+        const String stored = configServer.GetStoredString(key);
+        if (!stored.isEmpty())
+            target = stored == "true";
+    };
+
+    ReadToggle("infotext", displayInfoText);
+    ReadToggle("triangle", displayTriangles);
+    ReadToggle("circles", displayRadarCircles);
+    ReadToggle("det-icon", detailIcon);
+    ReadToggle("det-callsign", detailCallsign);
+    ReadToggle("det-alt", detailAltitude);
+    ReadToggle("det-spd", detailSpeed);
+    ReadToggle("det-hdg", detailHeading);
+    ReadToggle("det-icao", detailIcao);
 
     // calculate how often we can call OpenSky API before being rate limited
     constexpr int MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -174,59 +185,84 @@ void AircraftManager::DrawDetails(LGFX_Sprite &backbuffer)
     TrackedAircraft &tracked =
         *visibleAircraft[selectedAircraftIndex];
 
-    // Aircraft icon
-    DrawAircraftTriangle(
-        backbuffer,
-        CENTRE,
-        45,
-        tracked,
-        false);
-
     backbuffer.setTextColor(lgfx::color888(0, 255, 0));
     backbuffer.setTextDatum(textdatum_t::middle_center);
 
-    // Callsign
-    String callsign = tracked.state.callsign;
-    callsign.trim();
+    // Every field is optional, so the rows stack downwards from here instead of
+    // sitting at fixed offsets.
+    int y = 45;
+    constexpr int LINE = 20;
+    constexpr int BLOCK = 30;
 
-    backbuffer.setTextSize(2);
-    backbuffer.drawString(
-        callsign,
-        CENTRE,
-        75);
+    if (detailIcon)
+    {
+        DrawAircraftTriangle(
+            backbuffer,
+            CENTRE,
+            y,
+            tracked,
+            false);
+
+        y += BLOCK;
+    }
+
+    if (detailCallsign)
+    {
+        String callsign = tracked.state.callsign;
+        callsign.trim();
+
+        backbuffer.setTextSize(2);
+        backbuffer.drawString(
+            callsign,
+            CENTRE,
+            y);
+
+        y += BLOCK;
+    }
 
     backbuffer.setTextSize(1);
 
-    int y = 105;
-    constexpr int LINE = 20;
+    if (detailAltitude)
+    {
+        backbuffer.drawString(
+            "ALT " + String((int)tracked.state.baroAltitude) + " m",
+            CENTRE,
+            y);
 
-    backbuffer.drawString(
-        "ALT " + String((int)tracked.state.baroAltitude) + " m",
-        CENTRE,
-        y);
+        y += LINE;
+    }
 
-    y += LINE;
+    if (detailSpeed)
+    {
+        backbuffer.drawString(
+            "SPD " + String((int)tracked.state.velocity) + " m/s",
+            CENTRE,
+            y);
 
-    backbuffer.drawString(
-        "SPD " + String((int)tracked.state.velocity) + " m/s",
-        CENTRE,
-        y);
+        y += LINE;
+    }
 
-    y += LINE;
+    if (detailHeading)
+    {
+        backbuffer.drawString(
+            "HDG " + String((int)tracked.state.trueTrack) + " deg",
+            CENTRE,
+            y);
 
-    backbuffer.drawString(
-        "HDG " + String((int)tracked.state.trueTrack) + " deg",
-        CENTRE,
-        y);
+        y += LINE;
+    }
 
-    y += LINE;
+    if (detailIcao)
+    {
+        backbuffer.drawString(
+            tracked.state.icao24,
+            CENTRE,
+            y);
 
-    backbuffer.drawString(
-        tracked.state.icao24,
-        CENTRE,
-        y);
+        y += LINE;
+    }
 
-    y += 30;
+    y += 10;
 
     backbuffer.setTextColor(lgfx::color888(0, 100, 0));
 
@@ -269,7 +305,8 @@ void AircraftManager::Draw(LGFX_Sprite &backbuffer)
         return;
     }
 
-    DrawRadarCircles(backbuffer);
+    if (displayRadarCircles)
+        DrawRadarCircles(backbuffer);
 
     visibleAircraft.clear();
 

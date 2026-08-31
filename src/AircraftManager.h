@@ -23,6 +23,15 @@ private:
 
     bool displayInfoText = true;
     bool displayTriangles = true;
+    bool displayRadarCircles = true;
+
+    // Which fields the details screen shows
+    bool detailIcon = true;
+    bool detailCallsign = true;
+    bool detailAltitude = true;
+    bool detailSpeed = true;
+    bool detailHeading = true;
+    bool detailIcao = true;
 
     unsigned long fetchInterval = 0;
     unsigned long lastFetch = 999999;
