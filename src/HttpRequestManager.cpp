@@ -37,7 +37,7 @@ String HttpRequestManager::BuildQueryString(const std::vector<std::pair<String, 
 }
 
 HttpResult HttpRequestManager::Get(const String& url, const std::vector<std::pair<String, String>>& params, const std::vector<std::pair<String, String>>& headers) {
-    HttpResult result{ false, 0, "", "" };
+    HttpResult result{ false, 0, "", "", "" };
 
     const String queryParams = BuildQueryString(params);
     const String fullUrl = url + queryParams;
@@ -49,9 +49,14 @@ HttpResult HttpRequestManager::Get(const String& url, const std::vector<std::pai
         http.addHeader(header.first, header.second);
     }
 
+    // OpenSky puts the remaining credit balance here. Other APIs ignore it.
+    const char *rateLimitHeader[] = {"X-Rate-Limit-Remaining"};
+    http.collectHeaders(rateLimitHeader, 1);
+
     // send request and handle response
     int responseCode = http.GET();
     result.statusCode = responseCode;
+    result.rateLimitRemaining = http.header("X-Rate-Limit-Remaining");
 
     if (responseCode > 0) {
         result.success = true;
@@ -216,7 +221,7 @@ HttpResult HttpRequestManager::GetToBuffer(const String& url, uint8_t** outData,
 
 HttpResult HttpRequestManager::Post(const String& url, const String& body, const std::vector<std::pair<String, String>>& headers)
 {
-    HttpResult result{ false, 0, "", "" };
+    HttpResult result{ false, 0, "", "", "" };
 
     http.begin(url);
 

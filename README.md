@@ -21,7 +21,11 @@ This project is a fork of [Anthony Sturdy's Micro Radar project](https://github.
 - Simplified hardware requirements
 - OpenStreetMap background map, recoloured into a dark theme on the device
 - Web Mercator projection, so aircraft and map line up
+- Aircraft type as the details-screen heading, plus route when known
+- Registration, owner and climb rate on the details screen
+- Spelled-out airport towns alongside the IATA codes where they fit
 - Display rotation, backlight and map options in the web panel
+- Configurable OpenSky refresh rate, with its credit cost shown live
 ---
 ## Hardware
 
@@ -117,10 +121,20 @@ The device serves a configuration panel on port 80. Open it at `http://microrada
 | Reload map now | Fetches the tiles again, bypassing the cache, without changing any setting |
 | Backlight | Panel brightness over the BLK pin |
 | Rotate by 180 degrees | For mounting the display upside down, e.g. to suit the cable routing |
-| Radar sweep, Aircraft Info, Directional Aircraft | Radar overlay options |
+| Radar sweep, Radar circles, Aircraft Info, Directional Aircraft | Radar overlay options |
+| Aircraft details | Which rows the details screen shows. Type, route and registration are only requested when at least one of the three is on. Every row costs vertical space inside the round frame, so turning all of them on pushes the last one into the bezel |
+| Airport names | Adds the towns the airports serve to the route row, as `Barcelona (BCN) > Munich (MUC)`. Needs Route on. A route too long for one row drops the codes first and then the towns, since a shortened town name is worth less than either |
+| Climb rate | Vertical speed, amber climbing and cyan descending |
 | OpenSkyAPI Client ID / Secret | Credentials for the OpenSky Network API |
+| Aircraft refresh | Seconds between OpenSky requests, or 0 to spread the daily allowance evenly over 24 hours. The panel shows what the chosen rate costs per day of uptime and how long the allowance lasts at that rate |
 
 Saving restarts the device, because position, radius, filter and brightness all change the map that is fetched once at boot.
+
+### OpenSky credits
+
+OpenSky rations its API by daily credits rather than by rate: 4000 with credentials, 400 without, resetting at midnight UTC. Three are held back for the access token, which lasts 29 minutes and costs credits of its own.
+
+The automatic setting divides the day by the remaining allowance, which comes to one request every 22 seconds authenticated and every 217 seconds anonymous. A faster rate is allowed, because a radar that is only switched on in the evening can afford one the clock could not: 5 seconds costs 17280 credits per full day, but only 2160 over four hours. Once the allowance is gone the feed stops answering until the reset, so the panel spells out how many hours the chosen rate lasts. The floor is 5 seconds, below which OpenSky has no new position to give.
 
 The finished map is cached in LittleFS as `/map.raw`, so a restart usually shows it after about 40 ms instead of downloading four tiles again. The cache is dropped when the view or the look changes, or once it is older than seven days.
 
@@ -130,6 +144,16 @@ The finished map is cached in LittleFS as `/map.raw`, so a restart usually shows
 https://github.com/AnthonySturdy/micro-radar
 
 Many thanks to Anthony Sturdy for creating and open-sourcing the original project that made this fork possible.
+
+### Aircraft type and route data
+
+OpenSky state vectors carry neither the aircraft type, the registration nor the route, so the details screen resolves the selected aircraft against [adsbdb](https://www.adsbdb.com/). No API key is needed and the requests do not count against the OpenSky budget. Only the aircraft currently shown is looked up, and every answer is cached until the device restarts.
+
+Where adsbdb has no entry for an airframe, the type, registration and owner are looked up at [hexdb.io](https://hexdb.io/), which closes about half of those gaps. Neither database knows every aircraft, and for the remainder the operator derived from the callsign takes the place of the type.
+
+Names from a worldwide database carry accents the display font has no glyphs for, so the accented Latin letters are folded onto their base letter: Zürich reaches the display as Zurich rather than losing the letter altogether.
+
+The flight route data is the work of David Taylor, Edinburgh and Jim Mason, Glasgow, and may not be copied, published, or incorporated into other databases without the explicit permission of David J Taylor, Edinburgh. Aircraft data comes from Planebase.
 
 ### Map data
 

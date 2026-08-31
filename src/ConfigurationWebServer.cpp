@@ -1,4 +1,5 @@
 #include "ConfigurationWebServer.h"
+#include "OpenSkyBudget.h"
 #include "Viewport.h"
 #include <ESPmDNS.h>
 
@@ -132,6 +133,27 @@ static const char CONFIG_HTML[] PROGMEM = R"(
                         class="flex-1 border border-green-500 bg-gray-900 w-full px-3 py-2 text-lg sm:text-base sm:px-1 sm:py-0">
                 </label>
 
+                <fieldset class="border border-green-500 p-3 flex flex-col gap-4 sm:gap-2">
+                    <legend class="px-1">Aircraft refresh</legend>
+
+                    <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                        <span>Every (seconds, 0 for automatic):</span>
+                        <input
+                            name="fetch-interval"
+                            id="fetch-interval"
+                            type="number"
+                            min="0"
+                            max='%INTERVAL_MAX%'
+                            step="1"
+                            value='%FETCH_INTERVAL%'
+                            class="flex-1 border border-green-500 bg-gray-900 w-full px-3 py-2 text-lg sm:text-base sm:px-1 sm:py-0">
+                    </label>
+
+                    <p id="credits" class="text-green-700"></p>
+
+                    <p id="rate-limit" class="text-green-700">X-Rate-Limit-Remaining: %RATE_LIMIT_REMAINING%</p>
+                </fieldset>
+
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-2">
                     <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                         <span>Radar sweep:</span>
@@ -176,12 +198,24 @@ static const char CONFIG_HTML[] PROGMEM = R"(
                             <input name="det-icon" type="checkbox" %DET_ICON% class="accent-green-500">
                         </label>
                         <label class="flex items-center gap-2">
-                            <span>Callsign:</span>
-                            <input name="det-callsign" type="checkbox" %DET_CALLSIGN% class="accent-green-500">
+                            <span>Type:</span>
+                            <input name="det-type" type="checkbox" %DET_TYPE% class="accent-green-500">
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <span>Route:</span>
+                            <input name="det-route" type="checkbox" %DET_ROUTE% class="accent-green-500">
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <span>Airport names:</span>
+                            <input name="det-cities" type="checkbox" %DET_CITIES% class="accent-green-500">
                         </label>
                         <label class="flex items-center gap-2">
                             <span>Altitude:</span>
                             <input name="det-alt" type="checkbox" %DET_ALT% class="accent-green-500">
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <span>Climb rate:</span>
+                            <input name="det-vs" type="checkbox" %DET_VS% class="accent-green-500">
                         </label>
                         <label class="flex items-center gap-2">
                             <span>Speed:</span>
@@ -190,6 +224,14 @@ static const char CONFIG_HTML[] PROGMEM = R"(
                         <label class="flex items-center gap-2">
                             <span>Heading:</span>
                             <input name="det-hdg" type="checkbox" %DET_HDG% class="accent-green-500">
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <span>Registration:</span>
+                            <input name="det-reg" type="checkbox" %DET_REG% class="accent-green-500">
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <span>Callsign:</span>
+                            <input name="det-callsign" type="checkbox" %DET_CALLSIGN% class="accent-green-500">
                         </label>
                         <label class="flex items-center gap-2">
                             <span>Transponder:</span>
@@ -229,6 +271,59 @@ static const char CONFIG_HTML[] PROGMEM = R"(
                     .then(r => r.text())
                     .then(html => document.getElementById('result').innerHTML = html);
             });
+
+            const budget = %CREDIT_BUDGET%;
+            const authenticated = %CREDIT_AUTHED%;
+            const floorSeconds = %INTERVAL_MIN%;
+            const interval = document.getElementById('fetch-interval');
+            const credits = document.getElementById('credits');
+
+            function showCredits() {
+                const wanted = parseInt(interval.value, 10) || 0;
+                const automatic = wanted <= 0;
+                const seconds = automatic
+                    ? Math.ceil(86400 / budget)
+                    : Math.max(wanted, floorSeconds);
+                const perDay = Math.ceil(86400 / seconds);
+
+                let text = 'One request every ' + seconds + ' s, so ' + perDay
+                    + ' credits per 24 hours of uptime, against an allowance of ' + budget + '.';
+
+                if (automatic) {
+                    text += ' Automatic spreads the allowance over a full day.';
+                }
+                if (perDay > budget) {
+                    text += ' That runs out after ' + (24 * budget / perDay).toFixed(1) + ' hours.';
+                }
+                if (!authenticated) {
+                    text += ' Fill in the client ID and secret above for ten times the allowance.';
+                }
+
+                credits.textContent = text;
+                credits.className = perDay > budget ? 'text-amber-400' : 'text-green-700';
+            }
+
+            interval.addEventListener('input', showCredits);
+            showCredits();
+
+            const rateLimit = document.getElementById('rate-limit');
+
+            function showRateLimit(value) {
+                const unknown = !value || value === 'unknown';
+                const remaining = parseInt(value, 10);
+                rateLimit.textContent = 'X-Rate-Limit-Remaining: ' + (unknown ? 'unknown' : value);
+                rateLimit.className = !unknown && remaining === 0 ? 'text-amber-400' : 'text-green-700';
+            }
+
+            function refreshRateLimit() {
+                fetch('/opensky-remaining')
+                    .then(r => r.text())
+                    .then(showRateLimit)
+                    .catch(function() {});
+            }
+
+            setInterval(refreshRateLimit, 5000);
+            refreshRateLimit();
         </script>
     </body>
 </html>
@@ -259,17 +354,28 @@ void ConfigurationWebServer::Initialise()
         const String infoTextEnabled = prefs.getString("infotext", "true");
         const String triangleEnabled = prefs.getString("triangle", "true");
         const String detailIcon = prefs.getString("det-icon", "true");
-        const String detailCallsign = prefs.getString("det-callsign", "true");
+        const String detailType = prefs.getString("det-type", "true");
+        const String detailRoute = prefs.getString("det-route", "true");
+        const String detailAirportNames = prefs.getString("det-cities", "true");
         const String detailAltitude = prefs.getString("det-alt", "true");
+        const String detailVerticalSpeed = prefs.getString("det-vs", "true");
         const String detailSpeed = prefs.getString("det-spd", "true");
         const String detailHeading = prefs.getString("det-hdg", "true");
+        const String detailRegistration = prefs.getString("det-reg", "true");
+        const String detailCallsign = prefs.getString("det-callsign", "true");
         const String detailIcao = prefs.getString("det-icao", "true");
         const String mapEnabled = prefs.getString("map", "true");
         const String darkFilterEnabled = prefs.getString("map-dark", "true");
         const String mapBrightness = prefs.getString("map-brightness", "100");
         const String backlight = prefs.getString("backlight", "100");
         const String flipped = prefs.getString("flip", "false");
+        const String fetchInterval = prefs.getString("fetch-interval", "0");
         prefs.end();
+
+        // Whether the credentials are there, not whether they work. The panel
+        // only needs it to name the allowance the firmware will end up using.
+        const bool authenticated = !openskyClientId.isEmpty() && !openskySecret.isEmpty();
+        const String creditBudget = String(OpenSkyBudget::Credits(authenticated));
 
         // The zoom level is a whole number, so the configured radius gets
         // snapped to it. Showing the result makes that visible instead of
@@ -284,13 +390,17 @@ void ConfigurationWebServer::Initialise()
         // mask secret before sending to client
         std::fill(openskySecret.begin(), openskySecret.end(), '*');
 
+        const int remainingCredits = GetOpenSkyRateLimitRemaining();
+        const String rateLimitRemaining = remainingCredits < 0 ? String("unknown") : String(remainingCredits);
+
         // template processor called once per %PLACEHOLDER% token found in CONFIG_HTML.
         AsyncWebServerResponse* response = request->beginResponse(
             200, "text/html",
             (const uint8_t*)CONFIG_HTML, sizeof(CONFIG_HTML) - 1,
             [latitude, longitude, radius, openskyClientId, openskySecret, scanlineEnabled, circlesEnabled, infoTextEnabled, triangleEnabled,
-             mapEnabled, darkFilterEnabled, mapBrightness, backlight, flipped, zoomInfo,
-             detailIcon, detailCallsign, detailAltitude, detailSpeed, detailHeading, detailIcao]
+             mapEnabled, darkFilterEnabled, mapBrightness, backlight, flipped, zoomInfo, fetchInterval, creditBudget, authenticated,
+             rateLimitRemaining, detailIcon, detailType, detailRoute, detailAirportNames, detailAltitude, detailVerticalSpeed,
+             detailSpeed, detailHeading, detailRegistration, detailCallsign, detailIcao]
             (const String& var) -> String {
                 if (var == "LATITUDE")       return latitude;
                 if (var == "LONGITUDE")      return longitude;
@@ -307,11 +417,22 @@ void ConfigurationWebServer::Initialise()
                 if (var == "BACKLIGHT")      return backlight;
                 if (var == "FLIP")           return flipped == "true" ? "checked" : "";
                 if (var == "ZOOM_INFO")      return zoomInfo;
+                if (var == "FETCH_INTERVAL") return fetchInterval;
+                if (var == "CREDIT_BUDGET")  return creditBudget;
+                if (var == "CREDIT_AUTHED")  return authenticated ? "true" : "false";
+                if (var == "INTERVAL_MIN")   return String(OpenSkyBudget::MinimumIntervalSeconds);
+                if (var == "INTERVAL_MAX")   return String(OpenSkyBudget::LargestIntervalSeconds);
+                if (var == "RATE_LIMIT_REMAINING") return rateLimitRemaining;
                 if (var == "DET_ICON")       return detailIcon == "true" ? "checked" : "";
-                if (var == "DET_CALLSIGN")   return detailCallsign == "true" ? "checked" : "";
+                if (var == "DET_TYPE")       return detailType == "true" ? "checked" : "";
+                if (var == "DET_ROUTE")      return detailRoute == "true" ? "checked" : "";
+                if (var == "DET_CITIES")     return detailAirportNames == "true" ? "checked" : "";
                 if (var == "DET_ALT")        return detailAltitude == "true" ? "checked" : "";
+                if (var == "DET_VS")         return detailVerticalSpeed == "true" ? "checked" : "";
                 if (var == "DET_SPD")        return detailSpeed == "true" ? "checked" : "";
                 if (var == "DET_HDG")        return detailHeading == "true" ? "checked" : "";
+                if (var == "DET_REG")        return detailRegistration == "true" ? "checked" : "";
+                if (var == "DET_CALLSIGN")   return detailCallsign == "true" ? "checked" : "";
                 if (var == "DET_ICAO")       return detailIcao == "true" ? "checked" : "";
                 return "";
             }
@@ -341,6 +462,7 @@ void ConfigurationWebServer::Initialise()
         TrySaveParam("opensky-id");
         TrySaveParam("map-brightness");
         TrySaveParam("backlight");
+        TrySaveParam("fetch-interval");
 
         const auto* param = request->getParam("opensky-secret", true);
         if (param != nullptr) {
@@ -359,10 +481,15 @@ void ConfigurationWebServer::Initialise()
         prefs.putString("map-dark", request->hasParam("map-dark", true) ? "true" : "false");
         prefs.putString("flip", request->hasParam("flip", true) ? "true" : "false");
         prefs.putString("det-icon", request->hasParam("det-icon", true) ? "true" : "false");
-        prefs.putString("det-callsign", request->hasParam("det-callsign", true) ? "true" : "false");
+        prefs.putString("det-type", request->hasParam("det-type", true) ? "true" : "false");
+        prefs.putString("det-route", request->hasParam("det-route", true) ? "true" : "false");
+        prefs.putString("det-cities", request->hasParam("det-cities", true) ? "true" : "false");
         prefs.putString("det-alt", request->hasParam("det-alt", true) ? "true" : "false");
+        prefs.putString("det-vs", request->hasParam("det-vs", true) ? "true" : "false");
         prefs.putString("det-spd", request->hasParam("det-spd", true) ? "true" : "false");
         prefs.putString("det-hdg", request->hasParam("det-hdg", true) ? "true" : "false");
+        prefs.putString("det-reg", request->hasParam("det-reg", true) ? "true" : "false");
+        prefs.putString("det-callsign", request->hasParam("det-callsign", true) ? "true" : "false");
         prefs.putString("det-icao", request->hasParam("det-icao", true) ? "true" : "false");
         prefs.end();
 
@@ -380,6 +507,11 @@ void ConfigurationWebServer::Initialise()
 
         request->send(200, "text/html", "Reloading map..."); });
 
+    server.on("/opensky-remaining", HTTP_GET, [this](AsyncWebServerRequest *request)
+              {
+        const int remaining = GetOpenSkyRateLimitRemaining();
+        request->send(200, "text/plain", remaining < 0 ? "unknown" : String(remaining)); });
+
     server.begin();
 }
 
@@ -393,6 +525,16 @@ bool ConfigurationWebServer::ConsumeMapReloadRequest()
     mapReloadRequested = false;
 
     return true;
+}
+
+void ConfigurationWebServer::SetOpenSkyRateLimitRemaining(int remaining)
+{
+    openSkyRateLimitRemaining = remaining;
+}
+
+int ConfigurationWebServer::GetOpenSkyRateLimitRemaining() const
+{
+    return openSkyRateLimitRemaining;
 }
 
 const String ConfigurationWebServer::GetStoredString(const char *key)

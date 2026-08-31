@@ -4,10 +4,11 @@
 #include <vector>
 
 struct HttpResult {
-    bool success;           // Whether the request succeeded
-    int statusCode;         // HTTP status code (0 if network error)
-    String response;        // Response body (empty on error)
-    String errorMessage;    // Error description if success == false
+    bool success;              // Whether the request succeeded
+    int statusCode;            // HTTP status code (0 if network error)
+    String response;           // Response body (empty on error)
+    String errorMessage;       // Error description if success == false
+    String rateLimitRemaining; // X-Rate-Limit-Remaining, empty if the server sent none
 };
 
 class HttpRequestManager

@@ -41,6 +41,13 @@ static const uint32_t AircraftColours[] =
         lgfx::color888(255, 120, 200)  // Pink
 };
 
+// Every entry in the palette above is a saturated hue, so a highlight cannot
+// win on hue alone - green now belongs to several aircraft at once. White is the
+// one colour the palette does not reach, and the ring settles the question even
+// where aircraft overlap or the map runs pale underneath.
+static const uint32_t SelectionColour = lgfx::color888(255, 255, 255);
+constexpr int SelectionRingRadius = 12;
+
 void AircraftManager::Initialise()
 {
     // get centre point + radius
@@ -74,29 +81,91 @@ void AircraftManager::Initialise()
     ReadToggle("triangle", displayTriangles);
     ReadToggle("circles", displayRadarCircles);
     ReadToggle("det-icon", detailIcon);
-    ReadToggle("det-callsign", detailCallsign);
+    ReadToggle("det-type", detailType);
+    ReadToggle("det-route", detailRoute);
+    ReadToggle("det-cities", detailAirportNames);
     ReadToggle("det-alt", detailAltitude);
+    ReadToggle("det-vs", detailVerticalSpeed);
     ReadToggle("det-spd", detailSpeed);
     ReadToggle("det-hdg", detailHeading);
+    ReadToggle("det-reg", detailRegistration);
+    ReadToggle("det-callsign", detailCallsign);
     ReadToggle("det-icao", detailIcao);
 
-    // calculate how often we can call OpenSky API before being rate limited
-    constexpr int MS_PER_DAY = 24 * 60 * 60 * 1000;
-    constexpr int ANONYMOUS_TOKENS_PER_DAY = 400;
-    constexpr int AUTHED_TOKENS_PER_DAY = 4000;
-    constexpr int TOKEN_BUFFER = 3;
-    int dailyRequestBudget = ANONYMOUS_TOKENS_PER_DAY - TOKEN_BUFFER; // non-authed tokens minus buffer
-
     const String token = authHandler.GetValidToken(configServer.GetStoredString("opensky-id"), configServer.GetStoredString("opensky-secret"));
-    if (!token.isEmpty())
-        dailyRequestBudget = AUTHED_TOKENS_PER_DAY - TOKEN_BUFFER; // authed tokens minus buffer
+    const bool authenticated = !token.isEmpty();
 
-    fetchInterval = MS_PER_DAY / dailyRequestBudget;
+    long intervalSeconds = configServer.GetStoredString("fetch-interval").toInt();
+
+    // Zero is the automatic setting, spreading the day's credits evenly. It is
+    // also what an unconfigured device reads, so the interval that was hardcoded
+    // before this became a setting is still the one it starts on.
+    if (intervalSeconds <= 0)
+        intervalSeconds = OpenSkyBudget::AutomaticIntervalSeconds(authenticated);
+
+    // A faster refresh than the allowance covers is the user's call to make: a
+    // device that runs for four hours a day can afford one the clock could not.
+    // Only the floor is enforced, since below it the request is simply wasted.
+    intervalSeconds = constrain(
+        intervalSeconds,
+        OpenSkyBudget::MinimumIntervalSeconds,
+        OpenSkyBudget::LargestIntervalSeconds);
+
+    fetchInterval = (unsigned long)intervalSeconds * 1000UL;
+
+    Serial.printf("[AIRCRAFT] %s, refresh every %ld s, %ld credits per day of uptime out of %ld\n",
+                  authenticated ? "authenticated" : "anonymous",
+                  intervalSeconds,
+                  OpenSkyBudget::SecondsPerDay / intervalSeconds,
+                  OpenSkyBudget::Credits(authenticated));
+}
+
+bool AircraftManager::NeedsAircraftInfo() const
+{
+    return detailType || detailRoute || detailAirportNames || detailRegistration;
+}
+
+void AircraftManager::RequestInfoLookup()
+{
+    infoLookupPending = true;
+    infoLookupRequestedAt = millis();
+}
+
+void AircraftManager::ResolveSelectedAircraftInfo(unsigned long now)
+{
+    if (!infoLookupPending)
+        return;
+
+    // None of its rows are on screen, so the answer would never be read.
+    if (!NeedsAircraftInfo())
+    {
+        infoLookupPending = false;
+        return;
+    }
+
+    // Spinning the encoder walks past aircraft nobody wanted to look at. Waiting
+    // for the selection to settle turns that into a single request.
+    constexpr unsigned long SETTLE_MS = 250;
+    if (now - infoLookupRequestedAt < SETTLE_MS)
+        return;
+
+    infoLookupPending = false;
+
+    if (currentScreen != SCREEN_DETAILS ||
+        visibleAircraft.empty() ||
+        selectedAircraftIndex >= (int)visibleAircraft.size())
+        return;
+
+    const TrackedAircraft &tracked = *visibleAircraft[selectedAircraftIndex];
+
+    infoProvider.Fetch(tracked.state.icao24, tracked.state.callsign);
 }
 
 void AircraftManager::Update()
 {
     unsigned long now = millis();
+
+    ResolveSelectedAircraftInfo(now);
 
     // fetch cycle
     if (now - lastFetch >= fetchInterval)
@@ -123,6 +192,13 @@ void AircraftManager::Update()
              {"lomin", String(viewport.LonMin(), 6)},
              {"lomax", String(viewport.LonMax(), 6)}},
             headers);
+
+        if (!result.rateLimitRemaining.isEmpty())
+        {
+            configServer.SetOpenSkyRateLimitRemaining(result.rateLimitRemaining.toInt());
+            Serial.printf("[AIRCRAFT] OpenSky X-Rate-Limit-Remaining: %s\n",
+                          result.rateLimitRemaining.c_str());
+        }
 
         // If request failed, skip this update
         if (!result.success)
@@ -191,8 +267,8 @@ void AircraftManager::DrawDetails(LGFX_Sprite &backbuffer)
     // Every field is optional, so the rows stack downwards from here instead of
     // sitting at fixed offsets.
     int y = 45;
-    constexpr int LINE = 20;
-    constexpr int BLOCK = 30;
+    constexpr int LINE = 16;
+    constexpr int BLOCK = 26;
 
     if (detailIcon)
     {
@@ -206,21 +282,122 @@ void AircraftManager::DrawDetails(LGFX_Sprite &backbuffer)
         y += BLOCK;
     }
 
-    if (detailCallsign)
+    const AircraftInfo *info = nullptr;
+
+    if (NeedsAircraftInfo())
     {
-        String callsign = tracked.state.callsign;
-        callsign.trim();
+        info = infoProvider.TryGet(tracked.state.icao24);
+
+        // The selection can also change without the encoder, when the aircraft
+        // ahead of it drops out of the feed. Asking again here keeps the rows
+        // from being stuck on LOADING, and the pending check stops the settle
+        // timer from being pushed back on every frame.
+        if (info == nullptr && !infoLookupPending)
+            RequestInfoLookup();
+    }
+
+    // An airframe ADSBdb does not know leaves the operator as the only thing
+    // worth heading the screen with, and the route row then has to give way to
+    // avoid printing that same name twice.
+    bool airlineAsHeading = false;
+
+    if (detailType)
+    {
+        String type = "LOADING...";
+
+        if (info != nullptr)
+        {
+            type = info->TypeLabel();
+
+            if (type.isEmpty())
+            {
+                type = info->OperatorLabel();
+                airlineAsHeading = !type.isEmpty();
+            }
+
+            if (type.isEmpty())
+                type = "UNKNOWN";
+        }
 
         backbuffer.setTextSize(2);
-        backbuffer.drawString(
-            callsign,
-            CENTRE,
-            y);
 
-        y += BLOCK;
+        // Size 2 fits about 14 characters inside the circle. A name that runs
+        // longer just continues on the next line, split at a space if there is
+        // one near the middle.
+        constexpr unsigned int HeadingChars = 14;
+
+        if (type.length() > HeadingChars)
+        {
+            int split = type.length() / 2;
+            const int space = type.lastIndexOf(' ', split);
+
+            if (space > 0)
+                split = space;
+
+            String line2 = type.substring(split);
+            line2.trim();
+
+            backbuffer.drawString(type.substring(0, split), CENTRE, y);
+            backbuffer.drawString(line2, CENTRE, y + LINE);
+            y += BLOCK + LINE;
+        }
+        else
+        {
+            backbuffer.drawString(type, CENTRE, y);
+            y += BLOCK;
+        }
     }
 
     backbuffer.setTextSize(1);
+
+    if (detailRoute)
+    {
+        String route = "LOADING...";
+
+        if (info != nullptr)
+        {
+            // RouteLabel names the operator where no route is known, which is
+            // where the heading may already carry it.
+            const bool repeatsHeading = airlineAsHeading && !info->HasRoute();
+
+            route = repeatsHeading ? "" : info->RouteLabel();
+
+            if (route.isEmpty())
+                route = "NO ROUTE";
+        }
+
+        backbuffer.drawString(
+            route,
+            CENTRE,
+            y);
+
+        y += LINE;
+    }
+
+    if (detailAirportNames)
+    {
+        String names;
+
+        if (info == nullptr)
+        {
+            if (!detailRoute)
+                names = "LOADING...";
+        }
+        else
+        {
+            names = info->AirportNamesLabel();
+        }
+
+        if (!names.isEmpty())
+        {
+            backbuffer.drawString(
+                names,
+                CENTRE,
+                y);
+
+            y += LINE;
+        }
+    }
 
     if (detailAltitude)
     {
@@ -228,6 +405,34 @@ void AircraftManager::DrawDetails(LGFX_Sprite &backbuffer)
             "ALT " + String((int)tracked.state.baroAltitude) + " m",
             CENTRE,
             y);
+
+        y += LINE;
+    }
+
+    if (detailVerticalSpeed)
+    {
+        const int rate = (int)tracked.state.verticalRate;
+
+        // Whether the aircraft overhead has just left or is on approach is the
+        // one thing worth a colour of its own, since it is readable from across
+        // the room without the number.
+        constexpr int LEVEL_FLIGHT = 1;
+
+        if (rate >= LEVEL_FLIGHT)
+            backbuffer.setTextColor(lgfx::color888(255, 190, 0));
+        else if (rate <= -LEVEL_FLIGHT)
+            backbuffer.setTextColor(lgfx::color888(0, 220, 255));
+
+        String rateLabel = "V/S ";
+
+        if (rate > 0)
+            rateLabel += "+";
+
+        rateLabel += String(rate) + " m/s";
+
+        backbuffer.drawString(rateLabel, CENTRE, y);
+
+        backbuffer.setTextColor(lgfx::color888(0, 255, 0));
 
         y += LINE;
     }
@@ -252,31 +457,42 @@ void AircraftManager::DrawDetails(LGFX_Sprite &backbuffer)
         y += LINE;
     }
 
-    if (detailIcao)
+    if (detailRegistration)
     {
+        String registration = "LOADING...";
+
+        if (info != nullptr)
+            registration = info->registration.isEmpty()
+                               ? "NO REG"
+                               : "REG " + info->registration;
+
+        backbuffer.drawString(registration, CENTRE, y);
+
+        y += LINE;
+    }
+
+    if (detailCallsign)
+    {
+        String callsign = tracked.state.callsign;
+        callsign.trim();
+
         backbuffer.drawString(
-            tracked.state.icao24,
+            callsign,
             CENTRE,
             y);
 
         y += LINE;
     }
 
-    y += 10;
+    if (detailIcao)
+    {
+        backbuffer.drawString(
+            "XPDR " + tracked.state.icao24,
+            CENTRE,
+            y);
 
-    backbuffer.setTextColor(lgfx::color888(0, 100, 0));
-
-    backbuffer.drawString(
-        "< Rotate >",
-        CENTRE,
-        y);
-
-    y += 18;
-
-    backbuffer.drawString(
-        "Click to return",
-        CENTRE,
-        y);
+        y += LINE;
+    }
 }
 
 void AircraftManager::EncoderClick()
@@ -285,6 +501,9 @@ void AircraftManager::EncoderClick()
         (currentScreen == SCREEN_RADAR)
             ? SCREEN_DETAILS
             : SCREEN_RADAR;
+
+    if (currentScreen == SCREEN_DETAILS)
+        RequestInfoLookup();
 }
 
 void AircraftManager::Draw(LGFX_Sprite &backbuffer)
@@ -388,6 +607,9 @@ void AircraftManager::SelectNextAircraft()
     if (selectedAircraftIndex >= visibleAircraft.size())
         selectedAircraftIndex = 0;
 
+    if (currentScreen == SCREEN_DETAILS)
+        RequestInfoLookup();
+
     Serial.print("Aircraft count: ");
     Serial.println(visibleAircraft.size());
 
@@ -405,6 +627,9 @@ void AircraftManager::SelectPreviousAircraft()
     if (selectedAircraftIndex < 0)
         selectedAircraftIndex =
             visibleAircraft.size() - 1;
+
+    if (currentScreen == SCREEN_DETAILS)
+        RequestInfoLookup();
 
     Serial.print("Selected previous aircraft, index: ");
     Serial.println(selectedAircraftIndex);
@@ -478,10 +703,16 @@ void AircraftManager::DrawAircraftTriangle(
     const float px = -dy;
     const float py = dx;
 
-    const uint16_t colour =
+    // uint32_t, because LovyanGFX reads a 16-bit argument as a packed RGB565
+    // value: truncating here turned every colour with a red component into
+    // something else entirely.
+    const uint32_t colour =
         selected
-            ? lgfx::color888(255, 255, 255) // White
+            ? SelectionColour
             : GetAircraftColour(tracked);
+
+    if (selected)
+        backbuffer.drawCircle(x, y, SelectionRingRadius, colour);
 
     constexpr float BODY_FRONT = 8.0f;
     constexpr float BODY_REAR = 6.0f;
