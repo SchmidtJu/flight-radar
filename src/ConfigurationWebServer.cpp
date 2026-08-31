@@ -1,4 +1,5 @@
 #include "ConfigurationWebServer.h"
+#include "Viewport.h"
 #include <ESPmDNS.h>
 
 // HTML stored in flash
@@ -54,6 +55,67 @@ static const char CONFIG_HTML[] PROGMEM = R"(
                         class="flex-1 border border-green-500 bg-gray-900 w-full px-3 py-2 text-lg sm:text-base sm:px-1 sm:py-0">
                 </label>
 
+                <div class="text-xs opacity-80">%ZOOM_INFO%</div>
+
+                <fieldset class="border border-green-500 p-3 flex flex-col gap-4 sm:gap-2">
+                    <legend class="px-1">Map</legend>
+
+                    <div class="flex flex-col sm:flex-row gap-4 sm:gap-5">
+                        <label class="flex items-center gap-2">
+                            <span>Background:</span>
+                            <input name="map" type="checkbox" %MAP% class="accent-green-500">
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <span>Dark filter:</span>
+                            <input name="map-dark" type="checkbox" %MAP_DARK% class="accent-green-500">
+                        </label>
+                    </div>
+
+                    <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                        <span>Brightness (percent):</span>
+                        <input
+                            name="map-brightness"
+                            type="range"
+                            min="5"
+                            max="100"
+                            step="5"
+                            value='%MAP_BRIGHTNESS%'
+                            oninput="this.nextElementSibling.textContent = this.value"
+                            class="flex-1 w-full accent-green-500">
+                        <span class="w-8 text-right">%MAP_BRIGHTNESS%</span>
+                    </label>
+
+                    <button
+                        type="button"
+                        id="reload"
+                        class="border border-green-500 px-3 py-2 sm:px-2 sm:py-0 self-start cursor-pointer">
+                        Reload map now
+                    </button>
+                </fieldset>
+
+                <fieldset class="border border-green-500 p-3 flex flex-col gap-4 sm:gap-2">
+                    <legend class="px-1">Display</legend>
+
+                    <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                        <span>Backlight (percent):</span>
+                        <input
+                            name="backlight"
+                            type="range"
+                            min="5"
+                            max="100"
+                            step="5"
+                            value='%BACKLIGHT%'
+                            oninput="this.nextElementSibling.textContent = this.value"
+                            class="flex-1 w-full accent-green-500">
+                        <span class="w-8 text-right">%BACKLIGHT%</span>
+                    </label>
+
+                    <label class="flex items-center gap-2">
+                        <span>Rotate by 180 degrees:</span>
+                        <input name="flip" type="checkbox" %FLIP% class="accent-green-500">
+                    </label>
+                </fieldset>
+
                 <label class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                     <span>OpenSkyAPI Client ID:</span>
                     <input
@@ -106,12 +168,25 @@ static const char CONFIG_HTML[] PROGMEM = R"(
                         <div id="result" class="mt-4 px-1 sm:px-10"></div>
                 </div>
             </form>
+
+            <div class="border-t border-green-500 mt-5 pt-2 text-xs">
+                Map data (c)
+                <a href="https://www.openstreetmap.org/copyright" class="underline">OpenStreetMap contributors</a>,
+                tiles from tile.openstreetmap.org.
+                <a href="https://www.openstreetmap.org/fixthemap" class="underline">Report a map issue</a>.
+            </div>
         </fieldset>
 
         <script>
             document.getElementById('cfg').addEventListener('submit', function(e) {
                 e.preventDefault();
                 fetch(this.action, { method: 'POST', body: new FormData(this) })
+                    .then(r => r.text())
+                    .then(html => document.getElementById('result').innerHTML = html);
+            });
+
+            document.getElementById('reload').addEventListener('click', function() {
+                fetch('/reload-map', { method: 'POST' })
                     .then(r => r.text())
                     .then(html => document.getElementById('result').innerHTML = html);
             });
@@ -143,7 +218,22 @@ void ConfigurationWebServer::Initialise()
         const String scanlineEnabled = prefs.getString("scanline", "true");
         const String infoTextEnabled = prefs.getString("infotext", "true");
         const String triangleEnabled = prefs.getString("triangle", "true");
+        const String mapEnabled = prefs.getString("map", "true");
+        const String darkFilterEnabled = prefs.getString("map-dark", "true");
+        const String mapBrightness = prefs.getString("map-brightness", "100");
+        const String backlight = prefs.getString("backlight", "100");
+        const String flipped = prefs.getString("flip", "false");
         prefs.end();
+
+        // The zoom level is a whole number, so the configured radius gets
+        // snapped to it. Showing the result makes that visible instead of
+        // leaving the user guessing why the picture does not match the input.
+        const Viewport viewport = MakeViewport(latitude.toDouble(), longitude.toDouble(), radius.toDouble());
+
+        const String zoomInfo = String("Zoom ") + viewport.zoom
+                                + ", effective radius " + String(viewport.effectiveRadius, 4)
+                                + " deg, about " + String(viewport.effectiveRadius * 2.0 * 111.32, 0)
+                                + " km across";
 
         // mask secret before sending to client
         std::fill(openskySecret.begin(), openskySecret.end(), '*');
@@ -152,7 +242,8 @@ void ConfigurationWebServer::Initialise()
         AsyncWebServerResponse* response = request->beginResponse(
             200, "text/html",
             (const uint8_t*)CONFIG_HTML, sizeof(CONFIG_HTML) - 1,
-            [latitude, longitude, radius, openskyClientId, openskySecret, scanlineEnabled, infoTextEnabled, triangleEnabled]
+            [latitude, longitude, radius, openskyClientId, openskySecret, scanlineEnabled, infoTextEnabled, triangleEnabled,
+             mapEnabled, darkFilterEnabled, mapBrightness, backlight, flipped, zoomInfo]
             (const String& var) -> String {
                 if (var == "LATITUDE")       return latitude;
                 if (var == "LONGITUDE")      return longitude;
@@ -162,6 +253,12 @@ void ConfigurationWebServer::Initialise()
                 if (var == "SCANLINE")       return scanlineEnabled == "true" ? "checked" : "";
                 if (var == "INFOTEXT")       return infoTextEnabled == "true" ? "checked" : "";
                 if (var == "TRIANGLE")       return triangleEnabled == "true" ? "checked" : "";
+                if (var == "MAP")            return mapEnabled == "true" ? "checked" : "";
+                if (var == "MAP_DARK")       return darkFilterEnabled == "true" ? "checked" : "";
+                if (var == "MAP_BRIGHTNESS") return mapBrightness;
+                if (var == "BACKLIGHT")      return backlight;
+                if (var == "FLIP")           return flipped == "true" ? "checked" : "";
+                if (var == "ZOOM_INFO")      return zoomInfo;
                 return "";
             }
         );
@@ -188,6 +285,8 @@ void ConfigurationWebServer::Initialise()
         TrySaveParam("longitude");
         TrySaveParam("radius");
         TrySaveParam("opensky-id");
+        TrySaveParam("map-brightness");
+        TrySaveParam("backlight");
 
         const auto* param = request->getParam("opensky-secret", true);
         if (param != nullptr) {
@@ -197,15 +296,42 @@ void ConfigurationWebServer::Initialise()
             }
         }
 
+        // An unchecked box sends no parameter at all, so absence means false.
         prefs.putString("scanline", request->hasParam("scanline", true) ? "true" : "false");
         prefs.putString("triangle", request->hasParam("triangle", true) ? "true" : "false");
         prefs.putString("infotext", request->hasParam("infotext", true) ? "true" : "false");
+        prefs.putString("map", request->hasParam("map", true) ? "true" : "false");
+        prefs.putString("map-dark", request->hasParam("map-dark", true) ? "true" : "false");
+        prefs.putString("flip", request->hasParam("flip", true) ? "true" : "false");
         prefs.end();
 
         request->send(200, "text/html", "Saved - restarting device...");
         ESP.restart(); });
 
+    // Refetching means four TLS downloads, which must not happen inside an
+    // async handler: it would block the server task for seconds. The flag is
+    // picked up by the main loop instead.
+    server.on("/reload-map", HTTP_POST, [&](AsyncWebServerRequest *request)
+              {
+        Serial.println("[POST] map reload requested");
+
+        mapReloadRequested = true;
+
+        request->send(200, "text/html", "Reloading map..."); });
+
     server.begin();
+}
+
+bool ConfigurationWebServer::ConsumeMapReloadRequest()
+{
+    if (!mapReloadRequested)
+    {
+        return false;
+    }
+
+    mapReloadRequested = false;
+
+    return true;
 }
 
 const String ConfigurationWebServer::GetStoredString(const char *key)

@@ -19,6 +19,9 @@ This project is a fork of [Anthony Sturdy's Micro Radar project](https://github.
 - Multi-color aircraft rendering
 - Onboard RGB status LED
 - Simplified hardware requirements
+- OpenStreetMap background map, recoloured into a dark theme on the device
+- Web Mercator projection, so aircraft and map line up
+- Display rotation, backlight and map options in the web panel
 ---
 ## Hardware
 
@@ -99,8 +102,35 @@ After making your changes, rebuild and upload the firmware to your device.
 
 
 ---
+
+## Configuration
+
+The device serves a configuration panel on port 80. Open it at `http://microradar.local/`, or at the IP address the device prints to the serial log after connecting.
+
+| Option | Meaning |
+|---|---|
+| Latitude, Longitude | Centre of the view |
+| Radius | Half of the visible height in degrees. It is snapped to the next whole tile zoom level; the panel shows the resulting zoom and effective radius |
+| Map background | Turns the map off. Nothing is downloaded when it is off |
+| Dark filter | Recolours the tiles into the dark theme. Off shows the original OpenStreetMap colours, which makes the green aircraft hard to see unless you also lower the brightness |
+| Map brightness | Dims the map, so aircraft and the radar sweep stay on top |
+| Reload map now | Fetches the tiles again, bypassing the cache, without changing any setting |
+| Backlight | Panel brightness over the BLK pin |
+| Rotate by 180 degrees | For mounting the display upside down, e.g. to suit the cable routing |
+| Radar sweep, Aircraft Info, Directional Aircraft | Radar overlay options |
+| OpenSkyAPI Client ID / Secret | Credentials for the OpenSky Network API |
+
+Saving restarts the device, because position, radius, filter and brightness all change the map that is fetched once at boot.
+
+The finished map is cached in LittleFS as `/map.raw`, so a restart usually shows it after about 40 ms instead of downloading four tiles again. The cache is dropped when the view or the look changes, or once it is older than seven days.
+
+---
 ### Credits
 
 https://github.com/AnthonySturdy/micro-radar
 
 Many thanks to Anthony Sturdy for creating and open-sourcing the original project that made this fork possible.
+
+### Map data
+
+Map data (c) [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under the Open Database Licence. Tiles are fetched from `tile.openstreetmap.org` under the [Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/): only the tiles for the configured viewport are requested, the result is cached locally with a seven day lifetime, and the firmware identifies itself with its own User-Agent. Spotted a mistake in the map? [Report it here](https://www.openstreetmap.org/fixthemap).

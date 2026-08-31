@@ -48,6 +48,19 @@ void AircraftManager::Initialise()
     lon = configServer.GetStoredString("longitude").toDouble();
     rad = configServer.GetStoredString("radius").toDouble();
 
+    // The zoom level is a whole number, so the radius gets snapped to it. Using
+    // the configured value from here on would put the aircraft next to the map.
+    viewport = MakeViewport(lat, lon, rad);
+    rad = viewport.effectiveRadius;
+
+    Serial.printf("[AIRCRAFT] zoom %d, effective radius %.4f, box %.5f..%.5f / %.5f..%.5f\n",
+                  viewport.zoom,
+                  viewport.effectiveRadius,
+                  viewport.LatMin(),
+                  viewport.LatMax(),
+                  viewport.LonMin(),
+                  viewport.LonMax());
+
     // configuration
     const String renderText = configServer.GetStoredString("infotext");
     const String renderTris = configServer.GetStoredString("triangle");
@@ -91,10 +104,13 @@ void AircraftManager::Update()
         // request
         HttpResult result = http.Get(
             "https://opensky-network.org/api/states/all",
-            {{"lamin", String(lat - rad)},
-             {"lamax", String(lat + rad)},
-             {"lomin", String(lon - rad)},
-             {"lomax", String(lon + rad)}},
+            // Exactly the visible viewport. Under Mercator that box is wider in
+            // longitude than in latitude, so the previous square box in degrees
+            // missed aircraft at the left and right edge.
+            {{"lamin", String(viewport.LatMin(), 6)},
+             {"lamax", String(viewport.LatMax(), 6)},
+             {"lomin", String(viewport.LonMin(), 6)},
+             {"lomax", String(viewport.LonMax(), 6)}},
             headers);
 
         // If request failed, skip this update
@@ -362,23 +378,23 @@ void AircraftManager::DrawRadarCircles(LGFX_Sprite &backbuffer) const
     constexpr int CENTRE = SCREEN_SIZE_DIV_2 - 1;
     constexpr int OUTER = SCREEN_SIZE_DIV_2 - 5;
 
-    backbuffer.drawCircle(CENTRE, CENTRE, OUTER, lgfx::color888(0, 200, 0));
-    backbuffer.drawCircle(CENTRE, CENTRE, (OUTER / 3) * 2, lgfx::color888(0, 64, 0));
-    backbuffer.drawCircle(CENTRE, CENTRE, OUTER / 3, lgfx::color888(0, 32, 0));
+    // Brighter than before: these no longer sit on black but on a map, where
+    // the old 64 and 32 green were practically invisible.
+    backbuffer.drawCircle(CENTRE, CENTRE, OUTER, lgfx::color888(0, 220, 0));
+    backbuffer.drawCircle(CENTRE, CENTRE, (OUTER / 3) * 2, lgfx::color888(0, 110, 0));
+    backbuffer.drawCircle(CENTRE, CENTRE, OUTER / 3, lgfx::color888(0, 80, 0));
 }
 
 std::pair<int, int> AircraftManager::ProjectCoordinateToScreen(float predLat, float predLon) const
 {
-    const float dLon = predLon - lon;
-    const float dLat = predLat - lat;
+    // Web Mercator against the same origin the map tiles were placed at, which
+    // makes map and aircraft line up by construction. The previous equidistant
+    // formula stretched the picture horizontally by 1 / cos(lat) - at 52 degrees
+    // north that is 62 percent.
+    const double x = WebMercator::LonToWorldPx(predLon, viewport.zoom) - viewport.originX;
+    const double y = WebMercator::LatToWorldPx(predLat, viewport.zoom) - viewport.originY;
 
-    const float normLon = (dLon + rad) / (2.0f * rad);
-    const float normLat = (dLat + rad) / (2.0f * rad);
-
-    const int x = static_cast<int>(normLon * SCREEN_SIZE);
-    const int y = static_cast<int>(SCREEN_SIZE - (normLat * SCREEN_SIZE));
-
-    return {x, y};
+    return {static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y))};
 }
 
 void AircraftManager::DrawAircraftInfo(LGFX_Sprite &backbuffer, int x, int y, const TrackedAircraft &tracked) const

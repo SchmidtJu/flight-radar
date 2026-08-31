@@ -6,6 +6,7 @@
 #include "ConfigurationWebServer.h"
 #include "OpenSkyAuthTokenHandler.h"
 #include "LGFX.h"
+#include "Viewport.h"
 
 class AircraftManager
 {
@@ -13,6 +14,11 @@ private:
     double lat = 0.0;
     double lon = 0.0;
     double rad = 0.2;
+
+    // Derived from the configuration above and shared in spirit with the map:
+    // both sides project against this, so they cannot drift apart.
+    Viewport viewport;
+
     std::map<String, TrackedAircraft> trackedAircraft;
 
     bool displayInfoText = true;
