@@ -66,6 +66,7 @@ private:
     void DrawAircraftInfo(LGFX_Sprite &backbuffer, int x, int y, const TrackedAircraft &tracked) const;
     void DrawAircraftTriangle(LGFX_Sprite &backbuffer, int x, int y, const TrackedAircraft &tracked, bool selected) const;
     void DrawAircraftTriangle(LGFX_Sprite &backbuffer, int x, int y, const TrackedAircraft &tracked) const;
+    void DrawHelicopterIcon(LGFX_Sprite &backbuffer, int x, int y, const TrackedAircraft &tracked, uint32_t colour) const;
 
 public:
     AircraftManager(ConfigurationWebServer &config, OpenSkyAuthTokenHandler &auth, HttpRequestManager &httpManager, LGFX &tftGfx)

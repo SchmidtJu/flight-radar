@@ -702,6 +702,71 @@ void AircraftManager::DrawAircraftTriangle(LGFX_Sprite &backbuffer, int x, int y
     backbuffer.fillTriangle(tipX, tipY, leftX, leftY, rightX, rightY, lgfx::color888(0, 255, 0));
 }
 
+void AircraftManager::DrawHelicopterIcon(
+    LGFX_Sprite &backbuffer,
+    int x,
+    int y,
+    const TrackedAircraft &tracked,
+    uint32_t colour) const
+{
+    const float dx = std::sin(radians(tracked.state.trueTrack));
+    const float dy = -std::cos(radians(tracked.state.trueTrack));
+    const float px = -dy;
+    const float py = dx;
+
+    // OpenSky category 8 = rotorcraft. Drawn top-down at the same scale as
+    // the fixed-wing glyph so map and details stay consistent.
+    constexpr float BODY_FRONT = 4.0f;
+    constexpr float BODY_REAR = 3.0f;
+    constexpr float ROTOR_RADIUS = 7.0f;
+    constexpr float TAIL_LENGTH = 8.0f;
+    constexpr float TAIL_ROTOR = 3.0f;
+
+    const float noseX = x + dx * BODY_FRONT;
+    const float noseY = y + dy * BODY_FRONT;
+    const float cabinTailX = x - dx * BODY_REAR;
+    const float cabinTailY = y - dy * BODY_REAR;
+
+    // Compact cabin
+    for (int i = -1; i <= 1; i++)
+    {
+        backbuffer.drawLine(
+            noseX + px * i,
+            noseY + py * i,
+            cabinTailX + px * i,
+            cabinTailY + py * i,
+            colour);
+    }
+    backbuffer.fillCircle(noseX, noseY, 1, colour);
+
+    // Main rotor as an X (two blades across heading)
+    const float diag = ROTOR_RADIUS * 0.7071f;
+    backbuffer.drawLine(
+        x + (px + dx) * diag,
+        y + (py + dy) * diag,
+        x - (px + dx) * diag,
+        y - (py + dy) * diag,
+        colour);
+    backbuffer.drawLine(
+        x + (px - dx) * diag,
+        y + (py - dy) * diag,
+        x - (px - dx) * diag,
+        y - (py - dy) * diag,
+        colour);
+
+    // Tail boom and small tail rotor
+    const float boomX = x - dx * TAIL_LENGTH;
+    const float boomY = y - dy * TAIL_LENGTH;
+
+    backbuffer.drawLine(cabinTailX, cabinTailY, boomX, boomY, colour);
+    backbuffer.drawLine(
+        boomX + px * TAIL_ROTOR,
+        boomY + py * TAIL_ROTOR,
+        boomX - px * TAIL_ROTOR,
+        boomY - py * TAIL_ROTOR,
+        colour);
+}
+
 void AircraftManager::DrawAircraftTriangle(
     LGFX_Sprite &backbuffer,
     int x,
@@ -725,6 +790,13 @@ void AircraftManager::DrawAircraftTriangle(
 
     if (selected)
         backbuffer.drawCircle(x, y, SelectionRingRadius, colour);
+
+    // OpenSky aircraft category 8 = rotorcraft
+    if (tracked.state.category == 8)
+    {
+        DrawHelicopterIcon(backbuffer, x, y, tracked, colour);
+        return;
+    }
 
     constexpr float BODY_FRONT = 8.0f;
     constexpr float BODY_REAR = 6.0f;
