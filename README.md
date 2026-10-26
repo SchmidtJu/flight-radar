@@ -2,11 +2,6 @@
 This project is a fork of [Anthony Sturdy's Micro Radar project](https://github.com/AnthonySturdy/micro-radar?tab=readme-ov-file) and adapts it for inexpensive and readily available ESP32 hardware, rather than complex devices.
 
 ---
-![alt](Images/sample.gif)
-
-### [Watch the full build here](https://www.youtube.com/watch?v=KuVckV0wF9w)
-
----
 ### What's Different?
 
 **This fork adds:**
@@ -29,10 +24,19 @@ This project is a fork of [Anthony Sturdy's Micro Radar project](https://github.
 ---
 ## Hardware
 
-- ESP32-S3 Zero
-- 240x240 Round GC9A01 Display
-- Rotary Encoder
+- [ESP32-S3 Zero](https://amzn.eu/d/0a1FAhVQ) (USB-C, 4 MB flash, 2 MB PSRAM). The firmware is built for this board.
+- [240×240 round GC9A01 display](https://amzn.eu/d/0c7FremT)
+- [KY-040 rotary encoder](https://amzn.eu/d/03BbIKNv)
 - 3D printed parts
+- Optional: a [single domed mineral watch crystal](https://a.aliexpress.com/_EwDz3CA) (1.5 mm edge thickness, 35.5 mm diameter), bonded to the front of the display with [UV resin](https://amzn.eu/d/0gbuFWd9)
+
+### Power
+
+The only power connector is the USB-C socket on the ESP32-S3 Zero. The same socket is used to flash the board.
+
+- Flashing needs a USB-C cable that carries data, plugged into the PC. A charge-only cable powers the board and never shows a serial port.
+- After flashing, that same USB-C socket runs from any 5 V USB charger. A normal phone charger is enough.
+- The display and the encoder are powered from the board's 3.3 V pin, as in the wiring tables below. Do not connect either module's supply pin to 5 V.
 
 ---
 
@@ -69,40 +73,77 @@ This project is a fork of [Anthony Sturdy's Micro Radar project](https://github.
 
 ![Schematic Diagram](./Images/Schematic.png)
 ---
-## Flashing the Firmware
+## Build and flash (Windows 11)
 
-### Option 1: Flash Prebuilt Firmware (Recommended)
+PlatformIO Core builds the firmware and uploads it over the board's USB-C port. Visual Studio Code is not required. A browser-based flasher for the original project will not install this firmware.
 
-No development environment required.
+Use a USB-C cable that carries data. A charge-only cable powers the board and never shows a serial port.
 
-1. Connect the ESP32 to your computer using a USB cable.
+### 1. Install Python
 
-2. Open the Tech Talkies Flasher:
+1. Download Python 3.11 or newer from [python.org](https://www.python.org/downloads/windows/).
+2. Run the installer and enable **Add python.exe to PATH**.
+3. Close every open terminal, then open a new PowerShell or Command Prompt window so the updated PATH is picked up.
 
-   https://techtalkies.github.io/flash.html
+Check the install:
 
-3. Select the firmware.
+```
+python --version
+```
 
-4. Click **Connect** and choose your ESP32.
+### 2. Install PlatformIO Core
 
-5. Click **Install** and wait for the process to complete.
+```
+python -m pip install --upgrade platformio
+```
 
----
+The first build later downloads the ESP32 toolchain. That needs an internet connection and can take several minutes.
 
-### Option 2: Build and Flash from Source
+### 3. Get the project
 
-If you'd like to modify the firmware, build it yourself using PlatformIO.
+Download this repository as a ZIP and extract it, or clone it with Git. Either way, open a terminal in the extracted project directory — the folder that contains `platformio.ini`. In File Explorer, Shift+right-click that folder and choose **Open in Terminal**.
 
-1. Clone or download this repository.
-2. Install:
+### 4. Upload
 
-   * Visual Studio Code
-   * PlatformIO extension
-3. Open the project folder in VS Code.
-4. Allow PlatformIO to download the required dependencies.
-5. Build and upload the firmware to your ESP32 using the PlatformIO toolbar. And check if it works without modifications first.
+Connect the ESP32-S3 Zero, then run:
 
-After making your changes, rebuild and upload the firmware to your device.
+```
+pio run -t upload
+```
+
+If Windows says `pio` is not recognized, call PlatformIO through Python instead. The two commands do the same thing:
+
+```
+python -m platformio run -t upload
+```
+
+PlatformIO picks the COM port on its own when only one board is plugged in.
+
+To watch the serial log (115200 baud):
+
+```
+pio device monitor
+```
+
+Leave the monitor with `Ctrl+C`. Close it before the next upload, or the port stays busy.
+
+### If the board is not detected
+
+1. Try another USB port, preferably one on the PC itself.
+2. Hold **BOOT**, tap **RESET**, release **BOOT**, then run the upload again. The ESP32-S3 Zero often needs that the first time.
+3. In Device Manager, look under **Ports (COM & LPT)** for a USB serial device. Windows 11 already includes a driver for the board's built-in USB port, so a missing port is usually the cable, BOOT mode, or a different board than the ESP32-S3 Zero.
+
+### Optional: Visual Studio Code
+
+If you would rather click a button than type the commands, install [Visual Studio Code](https://code.visualstudio.com/) and the **PlatformIO IDE** extension, then open the project directory. The extension installs PlatformIO Core for you, so you can skip the `pip` step above and use **Upload** on the PlatformIO toolbar. The commands in this guide still work from VS Code's terminal.
+
+### First start
+
+1. Power the board. On first boot the display shows the Wi-Fi name **MicroRadar-Setup**.
+2. Join that network from a phone or PC. It is an open hotspot.
+3. The setup page should open on its own. If it does not, browse to `http://192.168.4.1/`.
+4. Enter your Wi-Fi name and password and save. The device restarts and joins that network.
+5. Open the configuration panel at `http://microradar.local/`. If that name does not resolve, the serial log prints the IP address to use instead.
 
 
 ---
