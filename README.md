@@ -1,227 +1,206 @@
-<h1 align=center>
-  📡 Micro Radar
-</h1>
-<h6 align=center>
-  a tiny open-source flight radar for your desk
-</h6>
-<p align=center>
-  <img src="https://github.com/user-attachments/assets/2ccb2063-d15c-4180-8e3c-ae3a81c814ff" alt="drawing" width="400"/>
-</p>
-<p align=center>
-  <a href="#prerequisites">PREREQUISITES</a> - <a href="#assembly">ASSEMBLY</a> - <a href="#usage">USAGE</a> - <a href="#faq">FAQ</a>
-</p>
+# 📡 Micro Radar
+This project is a fork of [Anthony Sturdy's Micro Radar project](https://github.com/AnthonySturdy/micro-radar?tab=readme-ov-file) and adapts it for inexpensive and readily available ESP32 hardware, rather than complex devices. The ESP32-S3 Zero port it builds on is by [TechTalkies](https://github.com/TechTalkies).
 
-## Prerequisites
+---
+![alt](Images/sample.gif)
 
-At the core of this project is the ESP32-C3 module with an integrated 240x240 IPS screen. No soldering required. The module does all the heavy lifting.
+### [Watch the full build here](https://www.youtube.com/watch?v=KuVckV0wF9w)
 
-I used dark grey PLA filament for the print, but any colour will work just fine. For the lens (optional but recommended), you'll need clear-drying epoxy to secure it (not super glue, which will fog up the lens. Ask me how I know.)
+---
+### What's Different?
 
-### Tools you'll need
+**This fork adds:**
 
-- Small screwdriver (for M2 screws)
-- Soldering iron (for setting the threaded inserts)
+- ESP32-S3 Zero support
+- Round GC9A01 display support
+- Rotary encoder navigation
+- Aircraft selection and details screen
+- Enhanced aircraft icons
+- Multi-color aircraft rendering
+- Onboard RGB status LED
+- Simplified hardware requirements
+- OpenStreetMap background map, recoloured into a dark theme on the device
+- Web Mercator projection, so aircraft and map line up
+- Aircraft type as the details-screen heading, plus route when known
+- Registration, owner and climb rate on the details screen
+- Spelled-out airport towns alongside the IATA codes where they fit
+- Display rotation, backlight and map options in the web panel
+- Configurable OpenSky refresh rate, with its credit cost shown live
+---
+## Hardware
 
-Set up a clean, organised workspace before you start. You'll be handling small components and epoxy, so a dedicated area helps. Keep a damp cloth nearby for cleaning if needed, and ensure your soldering iron has adequate ventilation.
+- [ESP32-S3 Zero](https://www.amazon.de/dp/B0G2XKK6P6) (USB-C, 4 MB flash, 2 MB PSRAM). The firmware is built for this board.
+- [240×240 round GC9A01 display](https://www.amazon.de/dp/B0C5RNMWZ9)
+- [KY-040 rotary encoder](https://www.amazon.de/dp/B08LPMCF33)
+- 3D printed parts
+- Optional: a [single domed mineral watch crystal](https://www.aliexpress.com/item/1005004783554496.html) (1.5 mm edge thickness, 35.5 mm diameter), bonded to the front of the display with [UV resin](https://www.amazon.de/dp/B0GXDZH28G)
 
-### Shopping List
+### Power
 
-Everything you need is below. I've linked products I used and recommend for ease of build, though alternatives exist on Amazon and elsewhere. If you deviate from this hardware, you may need to modify the enclosure and/or code.
+The only power connector is the USB-C socket on the ESP32-S3 Zero. The same socket is used to flash the board.
 
-- [ ] [1.28" Round GC9A01 240x240 IPS Display Module with ESP32-C3 (no-touch)](https://www.aliexpress.com/item/1005008482665220.html)
-- [ ] [USB-C Ribbon Extension Cable (5cm, CMUP-CFPCB-BK)](https://www.aliexpress.com/item/1005005371248824.html)
-- [ ] [M2 Heat-set Threaded Inserts (+ soldering iron)](https://www.aliexpress.com/item/1005008493831823.html)
-- [ ] [32.5mm Round Mineral Glass Lens (optional, recommended)](https://www.aliexpress.com/item/1005004783554496.html)
-- [ ] [Gorilla Epoxy (necessary for fitting lens, useful anyway)](https://www.amazon.co.uk/Gorilla-Glue-25ml-Epoxy/dp/B009NQQJFC)
+- Flashing needs a USB-C cable that carries data, plugged into the PC. A charge-only cable powers the board and never shows a serial port.
+- After flashing, that same USB-C socket runs from any 5 V USB charger. A normal phone charger is enough.
+- The display and the encoder are powered from the board's 3.3 V pin, as in the wiring tables below. Do not connect either module's supply pin to 5 V.
 
-### Accounts / API
+---
 
-This project uses OpenSky's API for retrieving flight data.
+## Wiring
 
-I highly recommend making an account, as it's free, and allows the radar to make many more requests per day (400 -> 4000), which makes the live view much more accurate. However, it isn't necessary if you prefer.
+### GC9A01 240x240 Round Display
+| ESP32-S3 Zero | Display |
+|----------|----------|
+|GP2|SCL |
+|GP3|SDA |   
+|GP4|DC |   
+|GP5|CS |   
+|GP6|RST |   
+|GP1|BLK |   
+|3V3|VCC |   
+|GND|GND |   
 
-You can sign up [here](https://opensky-network.org), or search "OpenSky".
+> The AZDelivery GC9A01 module is specified for 3.3 V on both logic and supply — do not connect VCC to 5V.
+> BLK is driven by PWM, so the brightness can be controlled in software.
 
-Further info on what to do with the account is in the usage section.
+### KY-040 Rotary Encoder
 
-## Assembly
+| ESP32-S3 Zero | KY-040 |
+|---|---|
+| GP9 | CLK |
+| GP8 | DT |
+| GP7 | SW |
+| 3V3 | + |
+| GND | GND |
 
-Once you've got all the parts, assembly typically takes 1-2 hours (excluding print time).
+---
 
-**I strongly recommend reading the [Usage](#usage) section before you start assembly.** It'll help with troubleshooting if anything goes wrong. You might want to test the firmware and your hardware before closing everything up.
+![Circuit Diagram](./Images/Circuit.png)
 
-### Step 1: 3D Print
+![Schematic Diagram](./Images/Schematic.png)
+---
+## Build and flash (Windows 11)
 
-<img width="400" alt="FFCBBECA-6165-4138-8C84-16AB375511A2_1_105_c" src="https://github.com/user-attachments/assets/21c0753c-7d7c-425c-bdf6-0df037a8fdaa" />
+PlatformIO Core builds the firmware and uploads it over the board's USB-C port. Visual Studio Code is not required. A browser-based flasher for the original project will not install this firmware.
 
-Print all four STLs from `./hardware/stl/`:
+Use a USB-C cable that carries data. A charge-only cable powers the board and never shows a serial port.
 
-- Main enclosure
-- Front plate
-- Bezel
-- 2 spacers
+### 1. Install Python
 
-### Step 2: Heat-set Threaded Inserts
+1. Download Python 3.11 or newer from [python.org](https://www.python.org/downloads/windows/).
+2. Run the installer and enable **Add python.exe to PATH**.
+3. Close every open terminal, then open a new PowerShell or Command Prompt window so the updated PATH is picked up.
 
-**You'll need:** Soldering iron, M2 threaded inserts
+Check the install:
 
-Start with the front plate: insert 2mm M2 threaded inserts into the larger holes using the soldering iron.
+```
+python --version
+```
 
-<img width="400" alt="IMG_7882" src="https://github.com/user-attachments/assets/defcfb2c-cdff-4bf1-84b9-7fceeefb0caf" />
+### 2. Install PlatformIO Core
 
-Next, the two spacers. These might warp slightly, that's fine. Insert 6mm M2 inserts into each.
+```
+python -m pip install --upgrade platformio
+```
 
-<img width="400" alt="IMG_7887" src="https://github.com/user-attachments/assets/73b95049-5f12-4e2b-983a-5242c05f9106" />
+The first build later downloads the ESP32 toolchain. That needs an internet connection and can take several minutes.
 
-Finally, the main enclosure. Insert 5mm M2 inserts.
+### 3. Get the project
 
-<img width="400" alt="IMG_7891" src="https://github.com/user-attachments/assets/e36f3eec-31b5-468e-8451-9c428eaf9c21" />
+Download this repository as a ZIP and extract it, or clone it with Git. Either way, open a terminal in the extracted project directory — the folder that contains `platformio.ini`. In File Explorer, Shift+right-click that folder and choose **Open in Terminal**.
 
-Et voilà.
+### 4. Upload
 
-<img width="400" alt="IMG_7896" src="https://github.com/user-attachments/assets/97337223-223c-4531-90e1-f511adfb3d66" />
+Connect the ESP32-S3 Zero, then run:
 
-### Step 3 (Optional): Fitting the Lens
+```
+pio run -t upload
+```
 
-<img width="400" alt="IMG_7902" src="https://github.com/user-attachments/assets/e555f787-ca87-4558-b1eb-107f9071f96e" />
+If Windows says `pio` is not recognized, call PlatformIO through Python instead. The two commands do the same thing:
 
-**You'll need:** Clear-drying epoxy, small applicator (match or cocktail stick works)
+```
+python -m platformio run -t upload
+```
 
-This is the fiddliest bit. Keep it neat and you'll avoid frustration:
+PlatformIO picks the COM port on its own when only one board is plugged in.
 
-- Apply epoxy to the front plate, not the lens
-- Lower the front plate onto the lens (easier to manage excess epoxy)
-- Have a cleaner ready for the edges (I used nail polish remover, your mileage may vary)
-- Less is more with epoxy
-- Work on a surface that won't bond to epoxy
+To watch the serial log (115200 baud):
 
-<img width="400" alt="IMG_7911" src="https://github.com/user-attachments/assets/aa497389-efd5-45c3-84dc-c997232889ac" />
+```
+pio device monitor
+```
 
-Let the epoxy cure according to its label before moving on.
+Leave the monitor with `Ctrl+C`. Close it before the next upload, or the port stays busy.
 
-### Step 4: Bezel
+### If the board is not detected
 
-**You'll need:** 2x5mm M2 screws, 2x10mm M2 screws
+1. Try another USB port, preferably one on the PC itself.
+2. Hold **BOOT**, tap **RESET**, release **BOOT**, then run the upload again. The ESP32-S3 Zero often needs that the first time.
+3. In Device Manager, look under **Ports (COM & LPT)** for a USB serial device. Windows 11 already includes a driver for the board's built-in USB port, so a missing port is usually the cable, BOOT mode, or a different board than the ESP32-S3 Zero.
 
-Secure the bezel to the front plate using 2x5mm M2 screws through the threaded inserts you added earlier.
+### Optional: Visual Studio Code
 
-<img width="400" alt="IMG_7914" src="https://github.com/user-attachments/assets/37a3502a-83e1-4552-a399-9a914e0ec973" />
+If you would rather click a button than type the commands, install [Visual Studio Code](https://code.visualstudio.com/) and the **PlatformIO IDE** extension, then open the project directory. The extension installs PlatformIO Core for you, so you can skip the `pip` step above and use **Upload** on the PlatformIO toolbar. The commands in this guide still work from VS Code's terminal.
 
-Screw 2x10mm M2 screws through the remaining two holes. They should protrude from the back.
+### First start
 
-<img width="400" alt="IMG_7915" src="https://github.com/user-attachments/assets/9ccfe5f2-347d-4563-a2b1-eb5e65e1d83f" />
+1. Power the board. On first boot the display shows the Wi-Fi name **MicroRadar-Setup**.
+2. Join that network from a phone or PC. It is an open hotspot.
+3. The setup page should open on its own. If it does not, browse to `http://192.168.4.1/`.
+4. Enter your Wi-Fi name and password and save. The device restarts and joins that network.
+5. Open the configuration panel at `http://microradar.local/`. If that name does not resolve, the serial log prints the IP address to use instead.
 
-Peel the protective film off the screen and position it over the lens. The screws you just inserted will guide the display into place.
 
-Before clamping it down with the spacers, **make sure the antenna is attached to the module**. Press it down firmly onto the flat surface until it clicks. Orientation doesn't matter, but you do need this connection otherwise you won't get any WiFi signal.
+---
 
-<img width="400" alt="IMG_7917" src="https://github.com/user-attachments/assets/ee53aac0-d119-4941-a814-f7ef23ffe7a0" />
+## Configuration
 
-<img width="400" alt="IMG_7920" src="https://github.com/user-attachments/assets/0d4d7d86-9787-4972-aa55-8ae43c9a078b" />
+The device serves a configuration panel on port 80. Open it at `http://microradar.local/`, or at the IP address the device prints to the serial log after connecting.
 
-Now screw the spacers into those protruding screws to clamp the module in place. I recommend keeping the board plugged in at this point to help with alignment. Don't use much force, too much pressure will stress the screen.
+| Option | Meaning |
+|---|---|
+| Latitude, Longitude | Centre of the view |
+| Radius | Half of the visible height in degrees. It is snapped to the next whole tile zoom level; the panel shows the resulting zoom and effective radius |
+| Map background | Turns the map off. Nothing is downloaded when it is off |
+| Dark filter | Recolours the tiles into the dark theme. Off shows the original OpenStreetMap colours, which makes the green aircraft hard to see unless you also lower the brightness |
+| Map brightness | Dims the map, so aircraft and the radar sweep stay on top |
+| Reload map now | Fetches the tiles again, bypassing the cache, without changing any setting |
+| Backlight | Panel brightness over the BLK pin |
+| Rotate by 180 degrees | For mounting the display upside down, e.g. to suit the cable routing |
+| Radar sweep, Radar circles, Aircraft Info, Directional Aircraft | Radar overlay options |
+| Aircraft details | Which rows the details screen shows. Type, route and registration are only requested when at least one of the three is on. Every row costs vertical space inside the round frame, so turning all of them on pushes the last one into the bezel |
+| Airport names | Adds the towns the airports serve to the route row, as `Barcelona (BCN) > Munich (MUC)`. Needs Route on. A route too long for one row drops the codes first and then the towns, since a shortened town name is worth less than either |
+| Climb rate | Vertical speed, amber climbing and cyan descending |
+| OpenSkyAPI Client ID / Secret | Credentials for the OpenSky Network API |
+| Aircraft refresh | Seconds between OpenSky requests, or 0 to spread the daily allowance evenly over 24 hours. The panel shows what the chosen rate costs per day of uptime and how long the allowance lasts at that rate |
 
-Once you're happy with the alignment, you can add a small amount of epoxy around the module to lock it in place permanently (optional, but recommended if you're happy with the build).
+Saving restarts the device, because position, radius, filter and brightness all change the map that is fetched once at boot.
 
-### Step 5: Final Assembly
+### OpenSky credits
 
-**You'll need:** USB-C ribbon extension cable, 4x7mm M2 screws, optional rubber feet
+OpenSky rations its API by daily credits rather than by rate: 4000 with credentials, 400 without, resetting at midnight UTC. Three are held back for the access token, which lasts 29 minutes and costs credits of its own.
 
-Attach the USB-C ribbon cable to the case with the provided nuts and bolts.
+The automatic setting divides the day by the remaining allowance, which comes to one request every 22 seconds authenticated and every 217 seconds anonymous. A faster rate is allowed, because a radar that is only switched on in the evening can afford one the clock could not: 5 seconds costs 17280 credits per full day, but only 2160 over four hours. Once the allowance is gone the feed stops answering until the reset, so the panel spells out how many hours the chosen rate lasts. The floor is 5 seconds, below which OpenSky has no new position to give.
 
-<img width="400" alt="IMG_7921" src="https://github.com/user-attachments/assets/f40a7943-c880-4718-9e69-c87a4f5d33aa" />
+The finished map is cached in LittleFS as `/map.raw`, so a restart usually shows it after about 40 ms instead of downloading four tiles again. The cache is dropped when the view or the look changes, or once it is older than seven days.
 
-<img width="400" alt="IMG_7923" src="https://github.com/user-attachments/assets/2daccb36-421f-4a3e-812a-51dae4444d4e" />
+---
+### Credits
 
-If you like, remove the supports from the bottom and insert rubber feet.
+https://github.com/AnthonySturdy/micro-radar
 
-<img width="400" alt="IMG_7924" src="https://github.com/user-attachments/assets/fdeb69f2-ec0d-441e-95ca-abd7523f7c61" />
+Many thanks to Anthony Sturdy for creating and open-sourcing the original project that made this fork possible.
 
-Plug in the board, then attach the front plate using 4x7mm M2 screws.
+### Aircraft type and route data
 
-<img width="400" alt="IMG_7925" src="https://github.com/user-attachments/assets/40da22d9-447d-4ad0-a500-02f862050e5c" />
+OpenSky state vectors carry neither the aircraft type, the registration nor the route, so the details screen resolves the selected aircraft against [adsbdb](https://www.adsbdb.com/). No API key is needed and the requests do not count against the OpenSky budget. Only the aircraft currently shown is looked up, and every answer is cached until the device restarts.
 
-Done!
+Where adsbdb has no entry for an airframe, the type, registration and owner are looked up at [hexdb.io](https://hexdb.io/), which closes about half of those gaps. Neither database knows every aircraft, and for the remainder the operator derived from the callsign takes the place of the type.
 
-<img width="400" alt="IMG_7930" src="https://github.com/user-attachments/assets/989fb56f-dacc-4bf5-a9ab-cb1311e534e4" />
+Names from a worldwide database carry accents the display font has no glyphs for, so the accented Latin letters are folded onto their base letter: Zürich reaches the display as Zurich rather than losing the letter altogether.
 
-## Usage
+The flight route data is the work of David Taylor, Edinburgh and Jim Mason, Glasgow, and may not be copied, published, or incorporated into other databases without the explicit permission of David J Taylor, Edinburgh. Aircraft data comes from Planebase.
 
-### Flashing the Firmware
+### Map data
 
-You'll need [VS Code](https://code.visualstudio.com/) with the [PlatformIO IDE extension](https://marketplace.visualstudio.com/items?itemName=platformio.platformio-ide) installed. Once installed, restart VS Code, open the repository folder, and dependencies will pull in automatically.
-
-Plug the board in via USB-C, then hit the upload button (→) in the bottom status bar. If the board doesn't reboot with the new firmware automatically, hold the BOOT button on the back and press RESET once, then release BOOT.
-
-The board should auto-detect, but if you hit an upload failure, check that the correct board is selected in the status bar. If it still won't upload, try:
-
-- Disconnect and reconnect the USB cable
-- Check that your cable supports data transfer (some USB-C cables are charge-only)
-- Try a different USB port on your computer
-
-Read more about PlatformIO [here](https://docs.platformio.org/en/latest/).
-
-### First Boot
-
-On first boot, the radar broadcasts a WiFi hotspot called `MicroRadar-Setup`. Connect to it from your phone or laptop and a configuration page will appear automatically (or go to your browser if it doesn't). Enter your WiFi credentials and hit save. The board will restart and connect to your network.
-
-If the hotspot doesn't appear straight away, give it a moment. If it still hasn't appeared after 30 seconds, exit the WiFi settings on your device and go back in to force a refresh. It'll usually show up then.
-
-### Configuration
-
-Once connected to your network, the radar config is accessible at [http://microradar.local](http://microradar.local) from any device on the same network.
-
-Here you can set:
-
-- **Location** (latitude and longitude): the centre point of your radar
-- **Radar radius**: how wide the scan extends (in degrees, 2 degrees is the limit to avoid rate limiting)
-- **Display options**: toggle visual elements
-- **OpenSky credentials**: your client ID and secret (if you've made an account - again, highly recommend!)
-
-<img width="400" alt="image" src="https://github.com/user-attachments/assets/45e6219c-2672-4197-baad-16ae08180b58" />
-
-If you've made an OpenSky account (which I highly recommend), you can find your credentials under your account settings at opensky-network.org. With authentication, you get 4000 requests per day instead of 400, making the live view much more accurate. Read more about the API [here](https://opensky-network.org).
-
-This configuration page is accessible anytime the device is connected to WiFi, so you can tweak settings whenever you want.
-
-That's it! Once you've configured everything, you should see a live view of all flights over your location. Enjoy :)
-
-<img width="400" alt="IMG_7935" src="https://github.com/user-attachments/assets/118b9a1c-c2c0-488d-b638-d8684a30b1d7" />
-
-## FAQ
-
-> the port is busy or doesn't exist
-
-Restart VS Code *after* plugging in the device. If VS Code was already open, it may default to a stale port from before the device was connected.
-
-If that doesn't work, look for the button with a small "Plug" icon on VS Code's bottom bar (it might say "auto", "cu.usbmodem101", or similar). Click it and select the option that shows your device's name.
-<br/><br/>
-
-> the 3D print failed
-
-If you're using a Bambu Lab printer, make sure you're opening the `.3mf` file, since it includes the correct print bed and settings.
-
-Using a different printer? Open an [Issue](../../issues) and I'll try to help where I can.
-<br/><br/>
-
-> `ModuleNotFoundError: No module named 'intelhex'` when building
-
-This appears to be a Windows-specific issue. Either of these should fix it:
-
-**Option A:**
-1. Open the PlatformIO terminal (PlatformIO sidebar → Miscellaneous → PlatformIO Core CLI)
-2. Run `pip install intelhex`
-3. Rebuild
-
-**Option B:**
-1. Open a new terminal in VS Code (Terminal → New Terminal)
-2. Run `python -m pip install intelhex`
-3. Rebuild
-
-## Notes
-
-> Designed and developed as part of a wedding present for a mate who loves aviation (congratulations to both him and his wife!)
-
-> Inspired by [therealhacksaw](https://www.instagram.com/therealhacksaw/)'s desk radar
-
-> Built with ♥︎ in London
+Map data (c) [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under the Open Database Licence. Tiles are fetched from `tile.openstreetmap.org` under the [Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/): only the tiles for the configured viewport are requested, the result is cached locally with a seven day lifetime, and the firmware identifies itself with its own User-Agent. Spotted a mistake in the map? [Report it here](https://www.openstreetmap.org/fixthemap).
